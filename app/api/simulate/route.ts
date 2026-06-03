@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { runSimulation } from "@/lib/engine";
 
 // Limite de execução (plano Hobby da Vercel permite até 60s).
-export const maxDuration = 60;
+export const maxDuration = 300;
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
