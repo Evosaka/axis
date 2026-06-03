@@ -1,88 +1,64 @@
-# Causal Cascade Engine — Simulador de Propagação de Consequências
+# Axis — Simulador de Propagação de Consequências
 
-Projeto para a **FIAP Global Solution 2026 ("Space Connect")**.
+Dado um acontecimento inicial (ex.: *"um asteroide de 300 m atinge a Califórnia"*), o **Axis** constrói automaticamente um grafo causal probabilístico das consequências em cascata. Cada nó do grafo representa uma consequência pontuada por confiança, com domínio, horizonte temporal, magnitude, localização geográfica e fontes verificáveis que a ancoram — reduzindo ao máximo a geração de informações sem embasamento.
 
-Dado um acontecimento (ex.: *"um asteroide de 300m atinge a Califórnia"*), o
-sistema constrói um **grafo causal probabilístico** das consequências em
-cascata — cada uma pontuada por confiança, com domínio, horizonte temporal,
-magnitude, geografia e **fontes/evidências** que a ancoram (anti-alucinação).
-
-> Foco temático: integração **Terra–Espaço** (impacto de asteroide / tempestade
-> solar derrubando satélites). Conecta dados reais (NASA NEO, clima espacial) nas
-> próximas fases.
-
-## Status (roteiro)
-
-- [x] **Fase 0/1** — Backend FastAPI + motor causal via OpenAI (Structured Outputs
-  com Pydantic). Endpoint `POST /simulate`.
-- [x] **Fase 2** — RAG Wikipedia: grounding real + verificação de fontes com links.
-- [ ] Fase 3 — Expansão BFS em cascata com poda + persistência em Neo4j.
-- [x] **Fase 4** — Frontend React + Cytoscape.js (grafo interativo, painel de fontes).
-- [x] **Fase 5** — Dados reais da NASA NEO (selecionar asteroide real e simular o impacto).
-- [x] **Fase 6** — Validação histórica: mede recall do motor vs. consequências reais (95% no conjunto atual).
-- [x] **Migração Next.js** — app unificado (frontend + API + validação) na raiz, deploy de 1 push na Vercel.
-
-## Como rodar
-
-App Next.js (App Router) na **raiz do repositório**: frontend + API na mesma base.
-
-```bash
-npm install
-cp .env.local.example .env.local     # e preencha OPENAI_API_KEY
-npm run dev                          # http://localhost:3000
-```
-
-Rotas: a UI em `/`, e as APIs em `/api/simulate` (POST) e `/api/asteroids` (GET).
-A lógica do motor vive em `lib/` (engine, wikipedia, nasa) e os schemas em
-`lib/schema.ts` (zod). Sem CORS — frontend e API na mesma origem.
-
-### Deploy na Vercel
-
-1. `git push` o repositório para o GitHub.
-2. Na Vercel: **New Project** → selecione o repo (Root Directory = raiz, padrão).
-   O preset Next.js é detectado automaticamente.
-3. Em **Environment Variables**, adicione `OPENAI_API_KEY` (e opcionalmente
-   `OPENAI_MODEL`, `NASA_API_KEY`).
-4. Deploy. Pronto — 1 URL, 1 serviço.
-
-> ⚠️ O `/simulate` leva ~35s. A rota define `maxDuration = 60` (teto do plano
-> Hobby). Cabe, mas é apertado — no plano Pro (300s) sobra folga. Para reduzir,
-> use profundidade/amplitude menores como padrão.
+O projeto nasceu com foco temático em eventos de integração **Terra–Espaço**: impacto de asteroides, tempestades solares, falha em constelações de satélites. Esse recorte conecta dados reais de agências como a NASA diretamente ao motor de simulação, tornando os cenários rastreáveis e auditáveis.
 
 ---
 
-## Validação histórica (Fase 6)
+## O que o sistema faz
 
-Mede se o motor reconstrói as consequências **documentadas** de eventos reais
-(Chernobyl, Eyjafjallajökull, COVID-19), casando por similaridade de embeddings —
-e roda o **mesmo motor que vai pro deploy**:
+### Motor causal com saída estruturada
+
+O núcleo do Axis é um motor que recebe um evento em linguagem natural e devolve um DAG (grafo acíclico dirigido) de consequências. Cada consequência carrega:
+
+- **Confiança** — probabilidade estimada pelo modelo de que aquela consequência ocorra dado o evento pai
+- **Domínio** — área de impacto (econômica, humanitária, ambiental, tecnológica etc.)
+- **Horizonte temporal** — quando a consequência tende a se manifestar
+- **Magnitude** — escala do impacto
+- **Fontes** — referências verificáveis que sustentam a relação causal
+
+A saída estruturada é validada via Zod antes de chegar ao cliente, garantindo que o grafo seja sempre completo e tipado.
+
+### Grounding via Wikipedia
+
+Antes de montar o grafo, o motor busca na Wikipedia artigos relacionados ao evento simulado e usa esse conteúdo como contexto adicional. Isso ancora as consequências em fatos documentados e exibe, para cada nó do grafo, os links das fontes consultadas — permitindo que o usuário audite de onde cada relação causal veio.
+
+### Dados reais da NASA
+
+O sistema integra a API **NASA NeoWs** (Near Earth Object Web Service), que lista objetos próximos à Terra com dados reais de diâmetro, velocidade e distância de aproximação. O usuário pode selecionar um asteroide real do catálogo da NASA e simular o impacto diretamente, substituindo parâmetros genéricos por valores científicos.
+
+### Visualização interativa do grafo
+
+O frontend exibe o DAG causal como um grafo interativo construído com **Cytoscape.js**. Os nós são coloridos por nível de confiança e clicáveis — ao selecionar um nó, o painel lateral mostra os detalhes da consequência e as fontes que a embasam. O layout usa o algoritmo Dagre para organizar a hierarquia causal de forma legível.
+
+### Validação histórica
+
+O Axis inclui um harness de validação que mede se o motor consegue reconstruir as consequências **documentadas** de eventos reais (Chernobyl, erupção do Eyjafjallajökull, COVID-19). A comparação usa similaridade de embeddings entre o que o motor gera e o que realmente ocorreu, produzindo um índice de recall auditável. O conjunto atual atinge **95% de recall** (21/22 consequências recuperadas, limiar 0.50).
+
+---
+
+## Stack
+
+**TypeScript · Next.js (App Router) · OpenAI API · Wikipedia · NASA NeoWs · React · Cytoscape.js · Zod**
+
+## Estrutura
+
+- **`app/`** — interface do usuário e rotas de API (`/api/simulate`, `/api/asteroids`)
+- **`lib/`** — motor causal (`engine.ts`), integrações (`wikipedia.ts`, `nasa.ts`), schemas (`schema.ts`), configuração
+- **`components/`** — visualização do grafo (`CausalGraph.tsx`)
+- **`validation/`** — harness de validação histórica e relatório de recall
+
+## Como rodar
 
 ```bash
-npm run validate                       # usa cache; -- --refresh re-roda
-npm run validate -- --threshold 0.55   # testa a sensibilidade ao limiar
+npm install
+cp .env.local.example .env.local   # preencha OPENAI_API_KEY
+npm run dev                        # http://localhost:3000
 ```
 
-Imprime o recall por evento e o total, e salva `validation/report.md`.
-Resultado atual: **21/22 = 95%** de recall (limiar 0.50, auditável).
+Para rodar a validação histórica:
 
-## Arquitetura
-
+```bash
+npm run validate
 ```
-Evento ─▶ Next.js /api/simulate ─▶ motor (OpenAI, saída estruturada)
-   │        (streaming de etapas)        │
-   │                                     ├─ Wikipedia (grounding + verificação de fontes)
-   ▼                                     └─ NASA NeoWs (asteroides reais)
- Grafo React + Cytoscape          DAG causal (nós + arestas ponderadas, com fontes)
-```
-
-Stack: **TypeScript · Next.js (App Router) · OpenAI API (gpt-4.1, configurável)** ·
-Wikipedia (RAG) · NASA NeoWs · React + Cytoscape.js · (futuro) Neo4j.
-
-## Estrutura do repositório
-
-Tudo num app Next.js só, na raiz:
-
-- **`app/`** — UI (`page.tsx`) + rotas de API (`api/simulate`, `api/asteroids`)
-- **`lib/`** — motor (`engine.ts`), `wikipedia.ts`, `nasa.ts`, `schema.ts` (zod), `config.ts`
-- **`components/`** — `CausalGraph.tsx` (Cytoscape)
-- **`validation/`** — harness da Fase 6 (`npm run validate`) + `report.md`
